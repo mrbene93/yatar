@@ -17,7 +17,7 @@ cat <files>.part* | tar -tvf
 
 
 ## mbuffer commands
-mbuffer -m 25% -s <blocksize> -P90 > <outputfile>
+mbuffer -q -m 25% -s <blocksize> -P90 > <outputfile>
 
 ## getopts
 while getopts ${optstring} arg
