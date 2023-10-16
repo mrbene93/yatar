@@ -10,6 +10,8 @@ fi
 
 
 # First batch of variables and functions
+OLDIFS=$IFS
+IFS=$'\n'
 tapesa=0
 tapedev="/dev/nsa$tapesa"
 taperewdev="/dev/sa$tapesa"
@@ -35,18 +37,25 @@ function get_taperecordnum {
 function moveto_file {
     # $1 = target filenum
     current=$(get_tapefilenum)
+    currentrec=$(get_taperecordnum)
     new=$1
-    if [[ $new -lt $current ]]      # Move backward
+    if [[ $new -lt $current ]]                                  # Move backward
     then
         movenum=$((current - new + 1))
         write_logfile "Moving backward to file $1."
         mt -f $tapedev bsf $movenum
         mt -f $tapedev fsf 1
-    elif [[ $new -gt $current ]]    # Move forward
+    elif [[ $new -gt $current ]]                                # Move forward
     then
         movenum=$((new - current))
         write_logfile "Moving forward to file $1."
         mt -f $tapedev fsf $movenum
+    elif [[ $new -eq $current ]] && [[ $currentrec -gt 0 ]]     # Move to beginning of current file
+    then
+        write_logfile "Correct file, but not at beginning."
+        write_logfile "Moving to the beginning of file."
+        mt -f $tapedev bsf 1
+        mt -f $tapedev fsf 1
     fi
 }
 
@@ -90,7 +99,7 @@ yatardir="${workingdir}/.yatar"
 excludefile="${yatardir}/exclude.txt"
 snapfile="${yatardir}/incremental.snap"
 cores=$(sysctl -n hw.ncpu)
-blocksize=$(sysctl -n kern.cam.sa.0.maxio)
+blocksize=$(sysctl -n kern.cam.sa.$tapesa.maxio)
 compresscmd="zstd --quiet --thread=$cores"
 mbuffercmd="mbuffer -m 25% -s $blocksize -P90"
 blockingfactor=$((blocksize / 512))
@@ -143,24 +152,12 @@ fi
 
 ## Get tape id
 tapeidbs=1048576
-mt -f $tapedev rewind
 tapevendor=$(camcontrol attrib $tapedev -r attr_values -a 0x0400 -F text_esc)
 tapeserial=$(camcontrol attrib $tapedev -r attr_values -a 0x0401 -F text_esc)
 tapeid=${tapevendor}-${tapeserial}
-tapeidontape=$(dd if=$taperewdev bs=$tapeidbs status=none 2> /dev/null)
 volfile="${yatardir}/${tapeid}.vol"
 mkdir -p $yatardir
 touch $volfile
-
-## Check if tape is empty or not and if it is known to yatar
-if [[ -n $tapeidontape ]] && [[ ! -s $volfile ]]
-then
-    echo "The tape may have been written to, but it is not known by yatar."
-    echo "Continuing would overwrite all contents."
-    echo "Please erase the tape before using it with yatar or insert another tape."
-    rm $volfile
-    exit 3
-fi
 
 ## Logfile header
 mkdir -p $jobdir
@@ -174,17 +171,28 @@ write_logfile "Path to file containing incremental metadata: $snapfile"
 write_logfile "Using blocksize of $blocksize Bytes."
 newline
 
-## Compare tape id in CAM to id written on tape
-if [[ $tapeid != $tapeidontape ]] 
+## Check if tape is empty or not and if it is known to yatar
+if [[ ! -s $volfile ]]
 then
-    write_logfile "The inserted tape is either blank or has never been written to by yatar."
-    write_logfile "Writing Tape-ID to file 0 of the tape, so it can be recognized."
-    echo $tapeid | dd of=$taperewdev bs=$tapeidbs status=none
-    write_logfile "The tape has the ID $tapeid."
-    newline
-    write_volfile 0 "Tape ID"
+    tapeidontape=$(dd if=$taperewdev bs=$tapeidbs count=1 status=none 2> /dev/null)
+    if [[ -n $tapeidontape ]]
+    then
+        echo "The tape may have been written to, but it is not known by yatar."
+        echo "The tape could also belong to another job."
+        echo "Continuing would overwrite all contents."
+        echo "Please erase the tape before using it with yatar or insert another tape."
+        rm -r $volfile $logfile $jobdir
+        exit 3
+    elif [[ -z $tapeidontape ]]
+    then
+        write_logfile "The inserted tape is either blank or has never been written to by yatar."
+        write_logfile "Writing Tape-ID to file 0 of the tape, so it can be recognized."
+        echo $tapeid | dd of=$taperewdev bs=$tapeidbs count=1 status=none
+        write_logfile "The tape has the ID $tapeid."
+        newline
+        write_volfile 0 "Tape ID"
+    fi
 fi
-
 
 # Creating exclude-file
 cat <<EOF > $excludefile
@@ -230,6 +238,7 @@ write_logfile "$(date -f %s +%Y%m%d_%H%M%S $dtbegin) Beginning to write the spec
 gtar \
 --blocking-factor=$blockingfactor \
 --exclude-from=$excludefile \
+--file=$tapedev \
 --format=gnu \
 --index-file=$indexfile \
 --listed-incremental=$snapfile \
