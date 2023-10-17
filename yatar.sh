@@ -257,7 +257,7 @@ write_logfile "$(date -f %s +%Y%m%d_%H%M%S $dtbegin) Beginning to write the spec
 gtar \
 --blocking-factor=$blockingfactor \
 --exclude-from=$excludefile \
---file=$tapedev \
+--file=- \
 --format=gnu \
 --index-file=$indexfile \
 --listed-incremental=$snapfile \
@@ -266,7 +266,13 @@ gtar \
 --utc \
 --verbose \
 --create \
-${files[@]}
+${files[@]} | \
+mbuffer -q \
+-s $blocksize \
+-m 25% \
+-P 90 \
+--tapeaware \
+-o $tapedev
 
 dtend=$(date +%s)
 write_logfile "$(date -f %s +%Y%m%d_%H%M%S $dtend) Finished writing data to tape."
