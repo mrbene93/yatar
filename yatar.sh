@@ -62,16 +62,16 @@ function moveto_file {
 
 
 # Get supplied parameters
-optstring=":f:elw:"
+optstring=":felw:"
 autoload=0
 eject=0
-files=''
+full=0
 workingdir=''
 while getopts ${optstring} arg
 do
     case ${arg} in
         f)  # Path to files to backup
-            files=$OPTARG
+            full=1
             ;;
         e)  # Eject tape after job is complete
             eject=1
@@ -94,15 +94,29 @@ do
 done
 
 
+# Get files to backup
+shift "$((OPTIND - 1))"
+files=()
+for arg in "$@"
+do
+    files+=(${arg})
+done
+
+
 # Second batch of variables and functions
 yatardir="${workingdir}/.yatar"
 excludefile="${yatardir}/exclude.txt"
-snapfile="${yatardir}/incremental.snap"
 cores=$(sysctl -n hw.ncpu)
 blocksize=$(sysctl -n kern.cam.sa.$tapesa.maxio)
 compresscmd="zstd --quiet --thread=$cores"
 mbuffercmd="mbuffer -m 25% -s $blocksize -P90"
 blockingfactor=$((blocksize / 512))
+if [[ $full -eq 1 ]]
+then
+    snapfile='/dev/null'
+else
+    snapfile="${yatardir}/incremental.snap"
+fi
 
 dt=$(date +"%Y%m%d_%H%M%S")
 
@@ -110,8 +124,8 @@ dt=$(date +"%Y%m%d_%H%M%S")
 # Create directories and files
 jobdir="${workingdir}/${dt}"
 logfile="${jobdir}/${dt}.log"
-indexfile="${jobdir}/${dt}.index"
 sumsfile="${jobdir}/${dt}.sums"
+indexfile="${jobdir}/${dt}.index"
 
 function newline {
     echo ''
@@ -167,7 +181,12 @@ newline
 write_logfile "Path to logfile containing list of files: $indexfile"
 write_logfile "Path to logfile containing checksums: $sumsfile"
 write_logfile "Path to library file containing used tapes: $volfile"
-write_logfile "Path to file containing incremental metadata: $snapfile"
+if [[ $snapfile == '/dev/null' ]]
+then
+    write_logfile "A full backup was requested, thus incremental snapfile is ignored."
+else
+    write_logfile "Path to file containing incremental metadata: $snapfile"
+fi
 write_logfile "Using blocksize of $blocksize Bytes."
 newline
 
@@ -247,7 +266,7 @@ gtar \
 --utc \
 --verbose \
 --create \
-"$files"
+${files[@]}
 
 dtend=$(date +%s)
 write_logfile "$(date -f %s +%Y%m%d_%H%M%S $dtend) Finished writing data to tape."
