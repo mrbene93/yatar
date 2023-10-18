@@ -119,7 +119,7 @@ else
 fi
 
 dt=$(date +"%Y%m%d_%H%M%S")
-
+dth=$(date)
 
 # Create directories and files
 jobdir="${workingdir}/${dt}"
@@ -176,7 +176,7 @@ touch $volfile
 ## Logfile header
 mkdir -p $jobdir
 touch $logfile
-write_logfile "Starting job-run on date and time $dt."
+write_logfile "$dth - Starting job run."
 newline
 write_logfile "Path to logfile containing list of files: $indexfile"
 write_logfile "Path to logfile containing checksums: $sumsfile"
@@ -252,7 +252,7 @@ newline
 
 ## Actual writing
 dtbegin=$(date +%s)
-write_logfile "$(date -f %s +%Y%m%d_%H%M%S $dtbegin) Beginning to write the specified data to tape."
+write_logfile "Beginning to write the specified data to tape."
 
 gtar \
 --blocking-factor=$blockingfactor \
@@ -275,7 +275,7 @@ mbuffer -q \
 -o $tapedev
 
 dtend=$(date +%s)
-write_logfile "$(date -f %s +%Y%m%d_%H%M%S $dtend) Finished writing data to tape."
+write_logfile "Finished writing data to tape."
 duration=$((dtend - $dtbegin))
 durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
 write_logfile "This took $durationh."
@@ -283,9 +283,14 @@ newline
 write_volfile $nextfile $dt
 
 # Create checksums and write them to sumsfile
+dtbegin=$(date +%s)
 write_logfile "Calculating checksums. This can take some time."
 cat $indexfile | grep --color=never --invert-match '^d' | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
-write_logfile "Checksums written to $sumsfile."
+dtend=$(date +%s)
+duration=$((dtend - $dtbegin))
+durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
+write_logfile "Checksums written."
+write_logfile "This took $durationh."
 newline
 
 
@@ -299,3 +304,7 @@ fi
 
 # Finish
 write_logfile "All done!"
+newline
+dth=$(date)
+write_logfile "$dth - Finished job run."
+
