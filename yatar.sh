@@ -193,6 +193,7 @@ newline
 ## Check if tape is empty or not and if it is known to yatar
 if [[ ! -s $volfile ]]
 then
+    mt -f $taperewdev rewind
     tapeidontape=$(dd if=$taperewdev bs=$tapeidbs count=1 status=none 2> /dev/null)
     if [[ -n $tapeidontape ]]
     then
