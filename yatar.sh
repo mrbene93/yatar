@@ -302,6 +302,9 @@ then
     newline
 fi
 
+# Cleanup
+rm $excludefile
+
 # Finish
 write_logfile "All done!"
 newline
