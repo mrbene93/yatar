@@ -9,6 +9,10 @@ fi
 
 
 
+# Create PID file
+pidfile='/var/run/yatar.pid'
+echo -n $$ > $pidfile
+
 # First batch of variables and functions
 OLDIFS=$IFS
 IFS=$'\n'
@@ -303,8 +307,6 @@ then
     newline
 fi
 
-# Cleanup
-rm $excludefile
 
 # Finish
 write_logfile "All done!"
@@ -312,3 +314,6 @@ newline
 dth=$(date)
 write_logfile "$dth - Finished job run."
 
+
+# Cleanup
+rm $excludefile $pidfile
