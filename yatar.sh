@@ -287,6 +287,11 @@ write_logfile "This took $durationh."
 newline
 write_volfile $nextfile $dt
 
+# Save drive temperature, TapeAlert flags and error counter log
+drivetemp=$(smartctl7.3 -A /dev/pass2 | grep --color=never 'Current Drive Temperature' | grep --color=never --only-matching --extended-regexp '[0-9]+')
+errorcounterlog=$(smartctl7.3 -l error /dev/pass2 | grep --color=never --after-context=5 'Error counter log')
+tapealert=$(smartctl7.3 -l tapealert /dev/pass2 | grep --color=never TapeAlert | awk '{print $2}')
+
 # Create checksums and write them to sumsfile
 dtbegin=$(date +%s)
 write_logfile "Calculating checksums. This can take some time."
@@ -298,6 +303,18 @@ write_logfile "Checksums written."
 write_logfile "This took $durationh."
 newline
 
+# Write S.M.A.R.T. infos into logfile
+if [[ $tapealert == 'OK' ]]
+then
+    write_logfile "The drives TapeAlert flags reported no error."
+else
+    write_logfile "The drives TapeAlert flags reported an error. File cohesion on the tape is not guaranteed. Please check."
+fi
+newline
+write_logfile "The drive had a temperature of $drivetemp °C after writing completed."
+newline
+write_logfile $errorcounterlog
+newline
 
 # Eject the tape if specified
 if [[ $eject -eq 1 ]]
