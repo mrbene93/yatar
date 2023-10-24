@@ -74,7 +74,7 @@ workingdir=''
 while getopts ${optstring} arg
 do
     case ${arg} in
-        f)  # Path to files to backup
+        f)  # Ignore incremental snapfile and do full backup
             full=1
             ;;
         e)  # Eject tape after job is complete
@@ -128,6 +128,7 @@ dth=$(date)
 # Create directories and files
 jobdir="${workingdir}/${dt}"
 logfile="${jobdir}/${dt}.log"
+errorfile="${jobdir}/${dt}.error"
 sumsfile="${jobdir}/${dt}.sums"
 indexfile="${jobdir}/${dt}.index"
 
@@ -149,6 +150,10 @@ function write_logfile {
     # $1 = input
     echo $1
     echo $1 >> $logfile
+}
+
+function write_errorfile {
+    echo "$errorcounterlog" >> $errorfile
 }
 
 
@@ -304,6 +309,7 @@ write_logfile "This took $durationh."
 newline
 
 # Write S.M.A.R.T. infos into logfile
+touch $errorfile
 if [[ $tapealert == 'OK' ]]
 then
     write_logfile "The drives TapeAlert flags reported no error."
@@ -313,8 +319,7 @@ fi
 newline
 write_logfile "The drive had a temperature of $drivetemp °C after writing completed."
 newline
-write_logfile $errorcounterlog
-newline
+write_errorfile
 
 # Eject the tape if specified
 if [[ $eject -eq 1 ]]
