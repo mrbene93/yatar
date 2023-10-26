@@ -300,7 +300,7 @@ tapealert=$(smartctl7.3 -l tapealert /dev/pass2 | grep --color=never TapeAlert |
 # Create checksums and write them to sumsfile
 dtbegin=$(date +%s)
 write_logfile "Calculating checksums. This can take some time."
-cat $indexfile | grep --color=never --invert-match '^d' | awk '{$1=$2=$3=$4=$5=""; print substr($0,6)}' | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
+cat $indexfile | grep --color=never --invert-match '^d' | awk '{print substr($0, index($0, $6))}' | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
 dtend=$(date +%s)
 duration=$((dtend - $dtbegin))
 durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
