@@ -271,6 +271,7 @@ gtar \
 --format=gnu \
 --index-file=$indexfile \
 --listed-incremental=$snapfile \
+--no-check-device \
 --sort=name \
 --use-compress-program="zstd --quiet --threads=$cores" \
 --utc \
