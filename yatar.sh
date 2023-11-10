@@ -294,17 +294,12 @@ newline
 dtbegin=$(date +%s)
 write_logfile "Beginning to write the specified data to tape."
 
-gtar \
---blocking-factor=$blockingfactor \
---exclude-from=$excludefile \
---file=- \
---format=gnu \
---index-file=$indexfile \
---no-check-device \
---sort=name \
---use-compress-program="zstd --quiet --threads=$cores" \
---utc \
---verbose \
+bsdtar \
+--block-size $blockingfactor \
+--file - \
+--options zstd:threads=$cores \
+--totals \
+--zstd \
 --create \
 ${files[@]} | \
 mbuffer -q \
