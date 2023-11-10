@@ -152,6 +152,7 @@ errorfile="${jobdir}/${dt}.error"
 sumsfile="${jobdir}/${dt}.sums"
 indexfile="${jobdir}/${dt}.index"
 journalfile="${jobdir}/${dt}.journal"
+difffile="${jobdir}/${dt}.diff"
 
 function newline {
     echo ''
@@ -261,6 +262,7 @@ newline
 
 ## Snapshot, hold, clone and mount datasets and get files that have been created or changed since the previous snapshot
 touch $journalfile
+diffs=()
 write_logfile "Snapshotting, cloning and mounting ZFS datasets."
 for dataset in ${datasets[@]}
 do
@@ -277,18 +279,27 @@ do
     zfs hold 'yatar' ${snapname}
     zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
     zfs mount ${clone}
-    zfs diff -FH ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3 >> ${journalfile}
+    diffs+=($(zfs diff -FH ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3))
 done
+diffs=($(printf "%s\n" "${diffs[@]}" | sort -u))
 newline
 
 ## Find files located in the actual mountpoints
+finds=()
 write_logfile "Curating and filtering files, that need to be archived."
 for file in ${files[@]}
 do
-    find ${file} -type f ! -iname '*._*' ! -iname '*.Trash*' ! -iname '*.DocumentRevisions-V100' ! -iname '*.fseventsd' ! -iname '*.Spotlight*' ! -iname '*.TemporaryItems' ! -iname '*RECYCLE.BIN' ! -iname 'System Volume Information' ! -iname '.DS_Store' ! -iname 'desktop.ini' ! -iname 'Thumbs.db' -type f >> ${journalfile}
-# mit grep in journal files der vorherigen jobs nachschauen, ob datei schon im backup vorhanden ist oder nicht und entsprechend nur die finds ausgeben, die nicht von grep gefunden wurden
+    finds+=($(find ${file} -type f ! -iname '*._*' ! -iname '*.Trash*' ! -iname '*.DocumentRevisions-V100' ! -iname '*.fseventsd' ! -iname '*.Spotlight*' ! -iname '*.TemporaryItems' ! -iname '*RECYCLE.BIN' ! -iname 'System Volume Information' ! -iname '.DS_Store' ! -iname 'desktop.ini' ! -iname 'Thumbs.db' -type f))
 done
+finds=($(printf "%s\n" "${finds[@]}" | sort -u))
 newline
+
+## Get files from previously run jobs
+prevjournals=()
+for journal in ${workingdir}/*/*.journal
+do
+    prevjournals+=($(cat ${journal}))
+done
 
 ## Actual writing
 dtbegin=$(date +%s)
