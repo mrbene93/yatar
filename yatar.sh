@@ -21,6 +21,8 @@ tapedev="/dev/nsa$tapesa"
 taperewdev="/dev/sa$tapesa"
 tapectldev="/dev/sa$tapesa.ctl"
 ltokey='/var/keys/lto.key'
+cloneds='data/appdata/yatar/clones'
+clonemp='/tmp/yatar'
 
 ## Check if hardware encryption key is loaded (should be loaded on boot)
 ltokeydesc="$(tail -n1 $ltokey)"
@@ -74,7 +76,7 @@ workingdir=''
 while getopts ${optstring} arg
 do
     case ${arg} in
-        f)  # Ignore incremental snapfile and do full backup
+        f)  # Do full backup
             full=1
             ;;
         e)  # Eject tape after job is complete
@@ -107,6 +109,24 @@ do
 done
 
 
+# Get involved ZFS datasets
+datasets=()
+for file in ${files[@]}
+do
+    if [[ -f $file ]]
+    then
+        datasets+=($(df $file | tail -n +2 | cut -d' ' -f1))
+    elif [[ -d $file ]]
+    then
+        dataset=$(df $file | tail -n +2 | cut -d' ' -f1)
+        for ds in $(zfs list -Ho name -rt filesystem $dataset)
+        do
+            datasets+=${ds}
+        done
+    fi
+done
+
+
 # Second batch of variables and functions
 yatardir="${workingdir}/.yatar"
 excludefile="${yatardir}/exclude.txt"
@@ -117,9 +137,9 @@ mbuffercmd="mbuffer -m 25% -s $blocksize -P90"
 blockingfactor=$((blocksize / 512))
 if [[ $full -eq 1 ]]
 then
-    snapfile='/dev/null'
+    # Full backup
 else
-    snapfile="${yatardir}/incremental.snap"
+    # Incremental backup
 fi
 
 dt=$(date +"%Y%m%d_%H%M%S")
@@ -131,6 +151,7 @@ logfile="${jobdir}/${dt}.log"
 errorfile="${jobdir}/${dt}.error"
 sumsfile="${jobdir}/${dt}.sums"
 indexfile="${jobdir}/${dt}.index"
+journalfile="${jobdir}/${dt}.journal"
 
 function newline {
     echo ''
@@ -190,12 +211,6 @@ newline
 write_logfile "Path to logfile containing list of files: $indexfile"
 write_logfile "Path to logfile containing checksums: $sumsfile"
 write_logfile "Path to library file containing used tapes: $volfile"
-if [[ $snapfile == '/dev/null' ]]
-then
-    write_logfile "A full backup was requested, thus incremental snapfile is ignored."
-else
-    write_logfile "Path to file containing incremental metadata: $snapfile"
-fi
 write_logfile "Using blocksize of $blocksize Bytes."
 newline
 
@@ -223,26 +238,10 @@ then
     fi
 fi
 
-# Creating exclude-file
-cat <<EOF > $excludefile
-*._*
-*.Trash*
-*.AppleDB
-*.DocumentRevisions-V100
-*.fseventsd
-*.Spotlight*
-*.TemporaryItems
-*$RECYCLE.BIN
-*System Volume Information
-*.DS_Store
-*desktop.ini
-*Desktop.ini
-*Thumbs.db
-EOF
 
 
-# Writing the files to tape with GNU Tar
-touch $indexfile $snapfile
+# Writing the files to tape with BSD Tar
+touch $indexfile
 
 ## Get the last file that was written to tape
 lastfile=$(get_tapelastfile)
@@ -260,6 +259,37 @@ then
 fi
 newline
 
+## Snapshot, hold, clone and mount datasets and get files that have been created or changed since the previous snapshot
+touch $journalfile
+write_logfile "Snapshotting, cloning and mounting ZFS datasets."
+for dataset in ${datasets[@]}
+do
+    zpool="${dataset%%/*}"
+    zpoolmp=$(zfs get -Ho value mountpoint ${zpool})
+    oldmp=$(zfs get -Ho value mountpoint ${dataset})
+    newmp="${oldmp/$zpoolmp/$clonemp}"
+    clonename="${dataset/$zpool\//}"
+    clonename=${clonename//\//_}
+    clone="${cloneds}/${clonename}"
+    snapname="${dataset}@yatar_${dt}"
+    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | tail -n1)"
+    zfs snapshot ${snapname}
+    zfs hold 'yatar' ${snapname}
+    zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
+    zfs mount ${clone}
+    zfs diff -FH ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3 >> ${journalfile}
+done
+newline
+
+## Find files located in the actual mountpoints
+write_logfile "Curating and filtering files, that need to be archived."
+for file in ${files[@]}
+do
+    find ${file} -type f ! -iname '*._*' ! -iname '*.Trash*' ! -iname '*.DocumentRevisions-V100' ! -iname '*.fseventsd' ! -iname '*.Spotlight*' ! -iname '*.TemporaryItems' ! -iname '*RECYCLE.BIN' ! -iname 'System Volume Information' ! -iname '.DS_Store' ! -iname 'desktop.ini' ! -iname 'Thumbs.db' -type f >> ${journalfile}
+# mit grep in journal files der vorherigen jobs nachschauen, ob datei schon im backup vorhanden ist oder nicht und entsprechend nur die finds ausgeben, die nicht von grep gefunden wurden
+done
+newline
+
 ## Actual writing
 dtbegin=$(date +%s)
 write_logfile "Beginning to write the specified data to tape."
@@ -270,7 +300,6 @@ gtar \
 --file=- \
 --format=gnu \
 --index-file=$indexfile \
---listed-incremental=$snapfile \
 --no-check-device \
 --sort=name \
 --use-compress-program="zstd --quiet --threads=$cores" \
@@ -321,6 +350,20 @@ newline
 write_logfile "The drive had a temperature of $drivetemp °C after writing completed."
 newline
 write_errorfile
+
+# Unmount, release and destroy dataset
+write_logfile "Unmounting and destroying the cloned ZFS snapshots."
+for dataset in ${datasets[@]}
+do
+    zfs unmount ${clone}
+    zfs destroy ${clone}
+    if [[ $prevsnap != "" ]]
+    then
+        zfs release 'yatar' ${prevsnap}
+        zfs destroy ${prevsnap}
+    fi
+done
+newline
 
 # Eject the tape if specified
 if [[ $eject -eq 1 ]]
