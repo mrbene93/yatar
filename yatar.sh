@@ -152,7 +152,6 @@ errorfile="${jobdir}/${dt}.error"
 sumsfile="${jobdir}/${dt}.sums"
 indexfile="${jobdir}/${dt}.index"
 journalfile="${jobdir}/${dt}.journal"
-difffile="${jobdir}/${dt}.diff"
 
 function newline {
     echo ''
@@ -279,7 +278,10 @@ do
     zfs hold 'yatar' ${snapname}
     zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
     zfs mount ${clone}
-    diffs+=($(zfs diff -FH ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3))
+    if [[ $prevsnap != "" ]] && [[ $full -ne 1 ]]
+    then
+        diffs+=($(zfs diff -FH ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3))
+    fi
 done
 diffs=($(printf "%s\n" "${diffs[@]}" | sort -u))
 newline
@@ -289,17 +291,36 @@ finds=()
 write_logfile "Curating and filtering files, that need to be archived."
 for file in ${files[@]}
 do
-    finds+=($(find ${file} -type f ! -iname '*._*' ! -iname '*.Trash*' ! -iname '*.DocumentRevisions-V100' ! -iname '*.fseventsd' ! -iname '*.Spotlight*' ! -iname '*.TemporaryItems' ! -iname '*RECYCLE.BIN' ! -iname 'System Volume Information' ! -iname '.DS_Store' ! -iname 'desktop.ini' ! -iname 'Thumbs.db' -type f))
+    finds+=($(find ${file} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db" -type f))
 done
 finds=($(printf "%s\n" "${finds[@]}" | sort -u))
 newline
 
 ## Get files from previously run jobs
-prevjournals=()
-for journal in ${workingdir}/*/*.journal
-do
-    prevjournals+=($(cat ${journal}))
-done
+if [[ $(find ${workingdir} -type f -name "*.journal") != "" ]] && [[ $full -ne 1 ]]
+then
+    prevjournals=()
+    for journal in ${workingdir}/*/*.journal
+    do
+        prevjournals+=($(cat ${journal}))
+    done
+fi
+
+## Build final list of files and write to journalfile, which will be used by bsdtar
+listoffiles=()
+if [[ $full -eq 1 ]]
+then
+    listoffiles=($(printf "%s\n" "${finds[@]}" | sort -u))
+else
+    # finds enthält alle gefundenen Dateien
+    # diffs enthält alle Dateien, welche seit dem letzten snapshot erstellt oder geändert wurden
+    # prevjournals enthält alle bereits gesicherten Dateien, eventuell mit alten Ständen
+    # Hier muss nun herausgefunden werden, welche Dateien seit der letzten Sicherung erstellt oder geändert wurden.
+    # Bereits gesicherte Dateien, die sich nicht geändert haben, werden nicht mit gesichert.
+    # Also muss im Endeffekt das array finds mit diffs und prevjournals gefiltert werden.
+fi
+
+
 
 ## Actual writing
 dtbegin=$(date +%s)
@@ -336,7 +357,7 @@ tapealert=$(smartctl7.3 -l tapealert /dev/pass2 | grep --color=never TapeAlert |
 # Create checksums and write them to sumsfile
 dtbegin=$(date +%s)
 write_logfile "Calculating checksums. This can take some time."
-cat $indexfile | grep --color=never --invert-match '^d' | awk '{print substr($0, index($0, $6))}' | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
+#cat $indexfile | grep --color=never --invert-match '^d' | awk '{print substr($0, index($0, $6))}' | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
 dtend=$(date +%s)
 duration=$((dtend - $dtbegin))
 durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
