@@ -318,9 +318,28 @@ else
     # Hier muss nun herausgefunden werden, welche Dateien seit der letzten Sicherung erstellt oder geändert wurden.
     # Bereits gesicherte Dateien, die sich nicht geändert haben, werden nicht mit gesichert.
     # Also muss im Endeffekt das array finds mit diffs und prevjournals gefiltert werden.
+    # Es sollen alle diffs ausgegeben werden.
+    # Es sollen nur finds ausgegeben werden, die nicht in den prevjournals vorhanden sind.
+    for find in ${finds[@]}
+    do
+        for diff in ${diffs[@]}
+        do
+            if [[ $find == $diff ]]
+            then
+                listoffiles+=($find)
+            fi
+        done
+        for prevjournal in ${prevjournals[@]}
+        do
+            if [[ $find != $prevjournal ]]
+            then
+                listoffiles+=($find)
+            fi
+        done
+    done
 fi
-
-
+listoffiles=($(printf "%s\n" "${listoffiles[@]}" | sort -u))
+echo "${listoffiles[@]}" > $journalfile
 
 ## Actual writing
 dtbegin=$(date +%s)
@@ -329,11 +348,11 @@ write_logfile "Beginning to write the specified data to tape."
 bsdtar \
 --block-size $blockingfactor \
 --file - \
+--files-from $journalfile \
 --options zstd:threads=$cores \
 --totals \
 --zstd \
---create \
-${files[@]} | \
+--create | \
 mbuffer -q \
 -s $blocksize \
 -m 25% \
