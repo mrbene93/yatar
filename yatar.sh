@@ -347,8 +347,12 @@ bsdtar \
 --block-size $blockingfactor \
 --file - \
 --files-from $journalfile \
+-s:^${clonemp}/:: \
 --totals \
---create | \
+--verbose \
+--verbose \
+--create \
+2> $indexfile | \
 zstd \
 --quiet \
 --threads=$cores | \
