@@ -340,10 +340,11 @@ bsdtar \
 --block-size $blockingfactor \
 --file - \
 --files-from $journalfile \
---options zstd:threads=$cores \
 --totals \
---zstd \
 --create | \
+zstd \
+--quiet \
+--threads=$cores | \
 mbuffer -q \
 -s $blocksize \
 -m 25% \
