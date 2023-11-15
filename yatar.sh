@@ -132,16 +132,7 @@ yatardir="${workingdir}/.yatar"
 excludefile="${yatardir}/exclude.txt"
 cores=$(sysctl -n hw.ncpu)
 blocksize=$(sysctl -n kern.cam.sa.$tapesa.maxio)
-compresscmd="zstd --quiet --thread=$cores"
-mbuffercmd="mbuffer -m 25% -s $blocksize -P90"
 blockingfactor=$((blocksize / 512))
-if [[ $full -eq 1 ]]
-then
-    # Full backup
-else
-    # Incremental backup
-fi
-
 dt=$(date +"%Y%m%d_%H%M%S")
 dth=$(date)
 
