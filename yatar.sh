@@ -139,6 +139,7 @@ dth=$(date)
 # Create directories and files
 jobdir="${workingdir}/${dt}"
 logfile="${jobdir}/${dt}.log"
+versionsfile="${jobdir}/${dt}.versions"
 errorfile="${jobdir}/${dt}.error"
 sumsfile="${jobdir}/${dt}.sums"
 indexfile="${jobdir}/${dt}.index"
@@ -204,6 +205,12 @@ write_logfile "Path to logfile containing checksums: $sumsfile"
 write_logfile "Path to library file containing used tapes: $volfile"
 write_logfile "Using blocksize of $blocksize Bytes."
 newline
+
+## Print versions to versionsfile
+bsdtar --version >> $versionsfile
+zstd --version >> $versionsfile
+xxhsum --version >> $versionsfile
+zfs --version >> $versionsfile
 
 ## Check if tape is empty or not and if it is known to yatar
 if [[ ! -s $volfile ]]
