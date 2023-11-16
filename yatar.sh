@@ -323,7 +323,7 @@ else
                     newmp="$(echo $mountpoint | cut -d',' -f2)"
                     if [[ "$find" == *"$oldmp"* ]]
                     then
-                        newfind=$(echo $find | sed "s|${oldmp}|${newmp}")
+                        newfind=$(echo $find | sed "s|${oldmp}|${newmp}|")
                         listoffiles+=($newfind)
                     fi
                 done
@@ -341,7 +341,7 @@ else
                         newmp="$(echo $mountpoint | cut -d',' -f2)"
                         if [[ "$find" == *"$oldmp"* ]]
                         then
-                            newfind=$(echo $find | sed "s|${oldmp}|${newmp}")
+                            newfind=$(echo $find | sed "s|${oldmp}|${newmp}|")
                             listoffiles+=($newfind)
                         fi
                     done
@@ -354,7 +354,7 @@ else
                 newmp="$(echo $mountpoint | cut -d',' -f2)"
                 if [[ "$find" == *"$oldmp"* ]]
                 then
-                    newfind=$(echo $find | sed "s|${oldmp}|${newmp}")
+                    newfind=$(echo $find | sed "s|${oldmp}|${newmp}|")
                     listoffiles+=($newfind)
                 fi
             done
