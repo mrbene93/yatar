@@ -273,7 +273,7 @@ do
     snapname="${dataset}@yatar_${dt}"
     prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | tail -n1)"
     zfs snapshot ${snapname}
-    zfs hold 'yatar' ${snapname}
+    zfs hold yatar ${snapname}
     zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
     zfs mount ${clone}
     if [[ $prevsnap != "" ]] && [[ $full -ne 1 ]]
@@ -337,7 +337,10 @@ else
     done
 fi
 listoffiles=($(printf "%s\n" "${listoffiles[@]}" | sort -u))
-echo "${listoffiles[@]}" > $journalfile
+for file in ${listoffiles[@]}
+do
+    echo $file >> $journalfile
+done
 
 ## Actual writing
 dtbegin=$(date +%s)
@@ -377,15 +380,19 @@ errorcounterlog=$(smartctl7.3 -l error /dev/pass2 | grep --color=never --after-c
 tapealert=$(smartctl7.3 -l tapealert /dev/pass2 | grep --color=never TapeAlert | awk '{print $2}')
 
 # Create checksums and write them to sumsfile
-dtbegin=$(date +%s)
-write_logfile "Calculating checksums. This can take some time."
-cat $journalfile | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
-dtend=$(date +%s)
-duration=$((dtend - $dtbegin))
-durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
-write_logfile "Checksums written."
-write_logfile "This took $durationh."
-newline
+touch $sumsfile
+if [[ -s $journalfile ]]
+then
+    dtbegin=$(date +%s)
+    write_logfile "Calculating checksums. This can take some time."
+    cat $journalfile | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
+    dtend=$(date +%s)
+    duration=$((dtend - $dtbegin))
+    durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
+    write_logfile "Checksums written."
+    write_logfile "This took $durationh."
+    newline
+fi
 
 # Write S.M.A.R.T. infos into logfile
 touch $errorfile
@@ -408,7 +415,7 @@ do
     zfs destroy ${clone}
     if [[ $prevsnap != "" ]]
     then
-        zfs release 'yatar' ${prevsnap}
+        zfs release yatar ${prevsnap}
         zfs destroy ${prevsnap}
     fi
 done
