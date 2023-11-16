@@ -66,7 +66,6 @@ function moveto_file {
 }
 
 
-
 # Get supplied parameters
 optstring=":felw:"
 autoload=0
@@ -260,6 +259,7 @@ newline
 ## Snapshot, hold, clone and mount datasets and get files that have been created or changed since the previous snapshot
 touch $journalfile
 diffs=()
+mountpoints=()
 write_logfile "Snapshotting, cloning and mounting ZFS datasets."
 for dataset in ${datasets[@]}
 do
@@ -267,6 +267,7 @@ do
     zpoolmp=$(zfs get -Ho value mountpoint ${zpool})
     oldmp=$(zfs get -Ho value mountpoint ${dataset})
     newmp="${oldmp/$zpoolmp/$clonemp}"
+    mountpoints+=("$oldmp","$newmp")
     clonename="${dataset/$zpool\//}"
     clonename=${clonename//\//_}
     clone="${cloneds}/${clonename}"
@@ -295,9 +296,9 @@ finds=($(printf "%s\n" "${finds[@]}" | sort -u))
 newline
 
 ## Get files from previously run jobs
+prevjournals=()
 if [[ $(find ${workingdir} -type f -name "*.journal") != "" ]] && [[ $full -ne 1 ]]
 then
-    prevjournals=()
     for journal in ${workingdir}/*/*.journal
     do
         prevjournals+=($(cat ${journal}))
@@ -310,33 +311,59 @@ if [[ $full -eq 1 ]]
 then
     listoffiles=($(printf "%s\n" "${finds[@]}" | sort -u))
 else
-    # finds enthält alle gefundenen Dateien
-    # diffs enthält alle Dateien, welche seit dem letzten snapshot erstellt oder geändert wurden
-    # prevjournals enthält alle bereits gesicherten Dateien, eventuell mit alten Ständen
-    # Hier muss nun herausgefunden werden, welche Dateien seit der letzten Sicherung erstellt oder geändert wurden.
-    # Bereits gesicherte Dateien, die sich nicht geändert haben, werden nicht mit gesichert.
-    # Also muss im Endeffekt das array finds mit diffs und prevjournals gefiltert werden.
-    # Es sollen alle diffs ausgegeben werden.
-    # Es sollen nur finds ausgegeben werden, die nicht in den prevjournals vorhanden sind.
     for find in ${finds[@]}
     do
         for diff in ${diffs[@]}
         do
-            if [[ $find == $diff ]]
+            if [[ "$find" == "$diff" ]]
             then
-                listoffiles+=($find)
+                for mountpoint in ${mountpoints[@]}
+                do
+                    oldmp="$(echo $mountpoint | cut -d',' -f1)"
+                    newmp="$(echo $mountpoint | cut -d',' -f2)"
+                    if [[ "$find" == *"$oldmp"* ]]
+                    then
+                        newfind=$(echo $find | sed "s|${oldmp}|${newmp}")
+                        listoffiles+=($newfind)
+                    fi
+                done
             fi
         done
-        for prevjournal in ${prevjournals[@]}
-        do
-            if [[ $find != $prevjournal ]]
-            then
-                listoffiles+=($find)
-            fi
-        done
+        if [[ ${#prevjournals[@]} -gt 0 ]]
+        then
+            for prevjournal in ${prevjournals[@]}
+            do
+                if [[ "$find" != "$prevjournal" ]]
+                then
+                    for mountpoint in ${mountpoints[@]}
+                    do
+                        oldmp="$(echo $mountpoint | cut -d',' -f1)"
+                        newmp="$(echo $mountpoint | cut -d',' -f2)"
+                        if [[ "$find" == *"$oldmp"* ]]
+                        then
+                            newfind=$(echo $find | sed "s|${oldmp}|${newmp}")
+                            listoffiles+=($newfind)
+                        fi
+                    done
+                fi
+            done
+        else
+            for mountpoint in ${mountpoints[@]}
+            do
+                oldmp="$(echo $mountpoint | cut -d',' -f1)"
+                newmp="$(echo $mountpoint | cut -d',' -f2)"
+                if [[ "$find" == *"$oldmp"* ]]
+                then
+                    newfind=$(echo $find | sed "s|${oldmp}|${newmp}")
+                    listoffiles+=($newfind)
+                fi
+            done
+        fi
     done
 fi
 listoffiles=($(printf "%s\n" "${listoffiles[@]}" | sort -u))
+
+## Write final listoffiles to journalfile
 for file in ${listoffiles[@]}
 do
     echo $file >> $journalfile
