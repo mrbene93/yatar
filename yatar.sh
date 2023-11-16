@@ -209,7 +209,7 @@ newline
 ## Print versions to versionsfile
 bsdtar --version >> $versionsfile
 zstd --version >> $versionsfile
-xxhsum --version >> $versionsfile
+xxhsum --version 2>> $versionsfile
 zfs --version >> $versionsfile
 
 ## Check if tape is empty or not and if it is known to yatar
