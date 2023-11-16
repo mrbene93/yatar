@@ -272,7 +272,7 @@ do
     clonename=${clonename//\//_}
     clone="${cloneds}/${clonename}"
     snapname="${dataset}@yatar_${dt}"
-    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | tail -n1)"
+    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | grep '@yatar' | tail -n1)"
     zfs snapshot ${snapname}
     zfs hold yatar ${snapname}
     zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
@@ -465,4 +465,4 @@ write_logfile "$dth - Finished job run."
 
 
 # Cleanup
-rm $excludefile $pidfile
+rm $pidfile
