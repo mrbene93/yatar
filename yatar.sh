@@ -311,14 +311,16 @@ newline
 
 ## Get files from previously run jobs
 prevjournals=()
-lsjournals=$(find $workingdir -type f -name "*.journal")
-if [[ "$lsjournals" != "" ]] && [[ $full -ne 1 ]]
+lsjournals=()
+lsjournals+=($(find $workingdir -type f -name "*.journal"))
+if [[ ${#lsjournals[@]} -ne 0 ]] && [[ $full -ne 1 ]]
 then
-    for journal in $lsjournals
+    for journal in ${lsjournals[@]}
     do
         prevjournals+=("$(cat $journal)")
     done
 fi
+prevjournals=($(printf "%s\n" "${prevjournals[@]}" | sort -u))
 
 ## Build final list of files and write to journalfile, which will be used by bsdtar
 listoffiles=()
@@ -337,13 +339,18 @@ else
         done
         if [[ ${#prevjournals[@]} -gt 0 ]]
         then
+            count=0
             for prevjournal in ${prevjournals[@]}
             do
-                if [[ "$find" != "$prevjournal" ]]
+                if [[ "$find" == "$prevjournal" ]]
                 then
-                    listoffiles+=($find)
+                    ((++count))
                 fi
             done
+            if [[ $count -eq 0 ]]
+            then
+                listoffiles+=($find)
+            fi
         else
             listoffiles+=($find)
         fi
