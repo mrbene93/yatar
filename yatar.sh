@@ -257,7 +257,6 @@ fi
 newline
 
 ## Snapshot, hold, clone and mount datasets and get files that have been created or changed since the previous snapshot
-touch $journalfile
 diffs=()
 mountpoints=()
 write_logfile "Snapshotting, cloning and mounting ZFS datasets."
@@ -279,7 +278,7 @@ do
     zfs mount ${clone}
     if [[ $prevsnap != "" ]] && [[ $full -ne 1 ]]
     then
-        diffs+=($(zfs diff -FH ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3))
+        diffs+=($(zfs diff -FHh ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3 | sed "s|${oldmp}|${newmp}|"))
     fi
 done
 diffs=($(printf "%s\n" "${diffs[@]}" | sort -u))
@@ -290,18 +289,34 @@ finds=()
 write_logfile "Curating and filtering files, that need to be archived."
 for file in ${files[@]}
 do
-    finds+=($(find ${file} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db" -type f))
+    for mountpoint in ${mountpoints[@]}
+    do
+        oldmp="$(echo $mountpoint | cut -d',' -f1)"
+        newmp="$(echo $mountpoint | cut -d',' -f2)"
+        if [[ "$file" == *"$oldmp"* ]]
+        then
+            newfile=$(echo $file | sed "s|${oldmp}|${newmp}|")
+        fi
+        founds=()
+        founds+=($(find ${newfile} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db" -type f))
+        for found in ${founds[@]}
+        do
+            finds+=($found)
+        done
+        founds=()
+    done
 done
 finds=($(printf "%s\n" "${finds[@]}" | sort -u))
 newline
 
 ## Get files from previously run jobs
 prevjournals=()
-if [[ $(find ${workingdir} -type f -name "*.journal") != "" ]] && [[ $full -ne 1 ]]
+lsjournals=$(find $workingdir -type f -name "*.journal")
+if [[ "$lsjournals" != "" ]] && [[ $full -ne 1 ]]
 then
-    for journal in ${workingdir}/*/*.journal
+    for journal in $lsjournals
     do
-        prevjournals+=($(cat ${journal}))
+        prevjournals+=("$(cat $journal)")
     done
 fi
 
@@ -317,16 +332,7 @@ else
         do
             if [[ "$find" == "$diff" ]]
             then
-                for mountpoint in ${mountpoints[@]}
-                do
-                    oldmp="$(echo $mountpoint | cut -d',' -f1)"
-                    newmp="$(echo $mountpoint | cut -d',' -f2)"
-                    if [[ "$find" == *"$oldmp"* ]]
-                    then
-                        newfind=$(echo $find | sed "s|${oldmp}|${newmp}|")
-                        listoffiles+=($newfind)
-                    fi
-                done
+                listoffiles+=($find)
             fi
         done
         if [[ ${#prevjournals[@]} -gt 0 ]]
@@ -335,35 +341,35 @@ else
             do
                 if [[ "$find" != "$prevjournal" ]]
                 then
-                    for mountpoint in ${mountpoints[@]}
-                    do
-                        oldmp="$(echo $mountpoint | cut -d',' -f1)"
-                        newmp="$(echo $mountpoint | cut -d',' -f2)"
-                        if [[ "$find" == *"$oldmp"* ]]
-                        then
-                            newfind=$(echo $find | sed "s|${oldmp}|${newmp}|")
-                            listoffiles+=($newfind)
-                        fi
-                    done
+                    listoffiles+=($find)
                 fi
             done
         else
-            for mountpoint in ${mountpoints[@]}
-            do
-                oldmp="$(echo $mountpoint | cut -d',' -f1)"
-                newmp="$(echo $mountpoint | cut -d',' -f2)"
-                if [[ "$find" == *"$oldmp"* ]]
-                then
-                    newfind=$(echo $find | sed "s|${oldmp}|${newmp}|")
-                    listoffiles+=($newfind)
-                fi
-            done
+            listoffiles+=($find)
         fi
     done
 fi
 listoffiles=($(printf "%s\n" "${listoffiles[@]}" | sort -u))
 
+
+########## Diagnose, muss später weg
+#echo "files"
+#echo $files
+#echo "diffs"
+#echo $diffs
+#echo "prevjournals"
+#echo $prevjournals
+#echo "lsjournals"
+#echo $lsjournals
+#echo "finds"
+#echo $finds
+#echo "listoffiles"
+#echo $listoffiles
+##########
+
+
 ## Write final listoffiles to journalfile
+touch $journalfile
 for file in ${listoffiles[@]}
 do
     echo $file >> $journalfile
