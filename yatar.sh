@@ -358,23 +358,6 @@ else
 fi
 listoffiles=($(printf "%s\n" "${listoffiles[@]}" | sort -u))
 
-
-########## Diagnose, muss später weg
-#echo "files"
-#echo $files
-#echo "diffs"
-#echo $diffs
-#echo "prevjournals"
-#echo $prevjournals
-#echo "lsjournals"
-#echo $lsjournals
-#echo "finds"
-#echo $finds
-#echo "listoffiles"
-#echo $listoffiles
-##########
-
-
 ## Write final listoffiles to journalfile
 touch $journalfile
 for file in ${listoffiles[@]}
