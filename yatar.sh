@@ -453,6 +453,12 @@ then
 fi
 
 
+# Create softlink to latest job
+oldpwd="$(pwd)"
+cd $workingdir
+ln -Fs $dt latest
+cd $oldpwd
+
 # Finish
 write_logfile "All done!"
 newline
