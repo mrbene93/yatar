@@ -472,4 +472,4 @@ write_logfile "$dth - Finished job run."
 
 
 # Cleanup
-rm $pidfile
+rm -r $clonemp $pidfile
