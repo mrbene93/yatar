@@ -120,10 +120,11 @@ do
         dataset=$(df $file | tail -n +2 | cut -d' ' -f1)
         for ds in $(zfs list -Ho name -rt filesystem $dataset)
         do
-            datasets+=${ds}
+            datasets+=(${ds})
         done
     fi
 done
+datasets=($(printf "%s\n" "${datasets[@]}" | sort -u))
 
 
 # Second batch of variables and functions
