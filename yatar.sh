@@ -297,14 +297,8 @@ do
         if [[ "$file" == *"$oldmp"* ]]
         then
             newfile=$(echo $file | sed "s|${oldmp}|${newmp}|")
+            finds+=($(find ${newfile} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db"))
         fi
-        founds=()
-        founds+=($(find ${newfile} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db" -type f))
-        for found in ${founds[@]}
-        do
-            finds+=($found)
-        done
-        founds=()
     done
 done
 finds=($(printf "%s\n" "${finds[@]}" | sort -u))
@@ -313,7 +307,7 @@ newline
 ## Get files from previously run jobs
 prevjournals=()
 lsjournals=()
-lsjournals+=($(find $workingdir -type f -name "*.journal"))
+lsjournals+=($(find ${workingdir} -type f -name "*.journal"))
 if [[ ${#lsjournals[@]} -ne 0 ]] && [[ $full -ne 1 ]]
 then
     for journal in ${lsjournals[@]}
@@ -435,13 +429,23 @@ write_errorfile
 write_logfile "Unmounting and destroying the cloned ZFS snapshots."
 for dataset in ${datasets[@]}
 do
-    zfs unmount ${clone}
-    zfs destroy ${clone}
-    if [[ $prevsnap != "" ]]
-    then
-        zfs release yatar ${prevsnap}
-        zfs destroy ${prevsnap}
-    fi
+    snapname="${dataset}@yatar_${dt}"
+    snaps=()
+    snaps+=($(zfs list -Ho name -t snapshot ${dataset} | grep '@yatar'))
+    for snap in ${snaps[@]}
+    do
+        clonedep=($(zfs get -Ho value clones $snap))
+        if [[ $clonedep != "-" ]]
+        then
+            zfs unmount $clonedep
+            zfs destroy $clonedep
+        fi
+        if [[ "$snap" != "$snapname" ]]
+        then
+            zfs release yatar $snap
+            zfs destroy $snap
+        fi
+    done
 done
 newline
 
