@@ -427,11 +427,11 @@ write_errorfile
 
 # Unmount, release and destroy dataset
 write_logfile "Unmounting and destroying the cloned ZFS snapshots."
-for dataset in ${datasets[@]}
+for (( i=${#datasets[@]}-1; i>=0; i-- ))
 do
-    snapname="${dataset}@yatar_${dt}"
+    snapname="${datasets[$i]}@yatar_${dt}"
     snaps=()
-    snaps+=($(zfs list -Ho name -t snapshot ${dataset} | grep '@yatar'))
+    snaps+=($(zfs list -Ho name -t snapshot ${datasets[$i]} | grep '@yatar'))
     for snap in ${snaps[@]}
     do
         clonedep=($(zfs get -Ho value clones $snap))
