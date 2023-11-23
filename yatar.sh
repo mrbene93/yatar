@@ -110,22 +110,23 @@ done
 
 
 # Get involved ZFS datasets
-datasets=()
-for file in ${files[@]}
-do
+function get_datasets {
+    local file="$1"
     if [[ -f $file ]]
     then
-        datasets+=($(df $file | tail -n +2 | cut -d' ' -f1))
+        df $file | tail -n +2 | cut -d' ' -f1
     elif [[ -d $file ]]
     then
         dataset=$(df $file | tail -n +2 | cut -d' ' -f1)
         for ds in $(zfs list -Ho name -rt filesystem $dataset)
         do
-            datasets+=(${ds})
+            echo $ds
         done
     fi
-done
-datasets=($(printf "%s\n" "${datasets[@]}" | sort -u))
+}
+export -f get_datasets
+datasets=()
+datasets+=($(parallel --silent --jobs $cores get_datasets "{}" ::: "${files[@]}" | sort -u))
 
 
 # Second batch of variables and functions
