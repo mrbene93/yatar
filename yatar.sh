@@ -16,6 +16,7 @@ echo -n $$ > $pidfile
 # First batch of variables and functions
 OLDIFS=$IFS
 IFS=$'\n'
+cores=$(sysctl -n hw.ncpu)
 tapesa=0
 tapedev="/dev/nsa$tapesa"
 taperewdev="/dev/sa$tapesa"
@@ -130,7 +131,6 @@ datasets=($(printf "%s\n" "${datasets[@]}" | sort -u))
 # Second batch of variables and functions
 yatardir="${workingdir}/.yatar"
 excludefile="${yatardir}/exclude.txt"
-cores=$(sysctl -n hw.ncpu)
 blocksize=$(sysctl -n kern.cam.sa.$tapesa.maxio)
 blockingfactor=$((blocksize / 512))
 dt=$(date +"%Y%m%d_%H%M%S")
