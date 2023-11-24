@@ -289,20 +289,19 @@ newline
 ## Find files located in the actual mountpoints
 finds=()
 write_logfile "Curating and filtering files, that need to be archived."
-for file in ${files[@]}
-do
-    for mountpoint in ${mountpoints[@]}
-    do
-        oldmp="$(echo $mountpoint | cut -d',' -f1)"
-        newmp="$(echo $mountpoint | cut -d',' -f2)"
-        if [[ "$file" == *"$oldmp"* ]]
-        then
-            newfile=$(echo $file | sed "s|${oldmp}|${newmp}|")
-            finds+=($(find ${newfile} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db"))
-        fi
-    done
-done
-finds=($(printf "%s\n" "${finds[@]}" | sort -u))
+function get_finds {
+    local file="$1"
+    local mountpoint="$2"
+    oldmp="$(echo $mountpoint | cut -d',' -f1)"
+    newmp="$(echo $mountpoint | cut -d',' -f2)"
+    if [[ "$file" == *"$oldmp"* ]]
+    then
+        newfile=$(echo $file | sed "s|${oldmp}|${newmp}|")
+        find ${newfile} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db"
+    fi
+}
+export -f get_finds
+finds+=($(parallel --silent --jobs $cores get_finds ::: ${files[@]} ::: ${mountpoints[@]} | sort -u))
 newline
 
 ## Get files from previously run jobs
