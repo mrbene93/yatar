@@ -305,17 +305,19 @@ finds+=($(parallel --silent --jobs $cores get_finds ::: ${files[@]} ::: ${mountp
 newline
 
 ## Get files from previously run jobs
-prevjournals=()
+function get_journals {
+    local journal="$1"
+    cat $journal
+}
+export -f get_journals
 lsjournals=()
 lsjournals+=($(find ${workingdir} -type f -name "*.journal"))
+prevjournals=()
 if [[ ${#lsjournals[@]} -ne 0 ]] && [[ $full -ne 1 ]]
 then
-    for journal in ${lsjournals[@]}
-    do
-        prevjournals+=("$(cat $journal)")
-    done
+    prevjournals+=($(parallel --silent --jobs $cores get_journals ::: ${lsjournals[@]} | sort -u))
 fi
-prevjournals=($(printf "%s\n" "${prevjournals[@]}" | sort -u))
+for j in ${prevjournals[@]}; do echo $j >> /tmp/prevjournals; done
 
 ## Build final list of files and write to journalfile, which will be used by bsdtar
 listoffiles=()
