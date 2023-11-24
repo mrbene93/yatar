@@ -287,7 +287,6 @@ diffs=($(printf "%s\n" "${diffs[@]}" | sort -u))
 newline
 
 ## Find files located in the actual mountpoints
-finds=()
 write_logfile "Curating and filtering files, that need to be archived."
 function get_finds {
     local file="$1"
@@ -301,6 +300,7 @@ function get_finds {
     fi
 }
 export -f get_finds
+finds=()
 finds+=($(parallel --silent --jobs $cores get_finds ::: ${files[@]} ::: ${mountpoints[@]} | sort -u))
 newline
 
