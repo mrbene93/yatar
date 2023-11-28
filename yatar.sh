@@ -24,6 +24,7 @@ tapectldev="/dev/sa$tapesa.ctl"
 ltokey='/var/keys/lto.key'
 cloneds='data/appdata/yatar/clones'
 clonemp='/tmp/yatar'
+tmpfsdir='/tmp/yatar_tmpfs'
 
 ## Check if hardware encryption key is loaded (should be loaded on boot)
 ltokeydesc="$(tail -n1 $ltokey)"
@@ -100,16 +101,22 @@ do
 done
 
 
+# Create tmpfs
+mkdir -p $tmpfsdir
+mount -t tmpfs tmpfs $tmpfsdir
+
+
 # Get files to backup
+tmp_files="${tmpfsdir}/files"
 shift "$((OPTIND - 1))"
-files=()
 for arg in "$@"
 do
-    files+=(${arg})
+    echo ${arg} >> $tmp_files
 done
 
 
 # Get involved ZFS datasets
+tmp_datasets="${tmpfsdir}/datasets"
 function get_datasets {
     local file="$1"
     if [[ -f $file ]]
@@ -125,8 +132,7 @@ function get_datasets {
     fi
 }
 export -f get_datasets
-datasets=()
-datasets+=($(parallel --silent --jobs $cores get_datasets "{}" ::: "${files[@]}" | sort -u))
+parallel --silent --jobs $cores --arg-file ${tmp_files} get_datasets "{}" | sort -u >> ${tmp_datasets}
 
 
 # Second batch of variables and functions
@@ -259,34 +265,37 @@ fi
 newline
 
 ## Snapshot, hold, clone and mount datasets and get files that have been created or changed since the previous snapshot
-diffs=()
-mountpoints=()
+tmp_diffs="${tmpfsdir}/diffs"
+tmp_mountpoints="${tmpfsdir}/mountpoints"
+touch ${tmp_diffs} ${tmp_mountpoints}
 write_logfile "Snapshotting, cloning and mounting ZFS datasets."
-for dataset in ${datasets[@]}
+for dataset in $(cat ${tmp_datasets})
 do
     zpool="${dataset%%/*}"
     zpoolmp=$(zfs get -Ho value mountpoint ${zpool})
     oldmp=$(zfs get -Ho value mountpoint ${dataset})
     newmp="${oldmp/$zpoolmp/$clonemp}"
     mountpoints+=("$oldmp","$newmp")
+    echo "$oldmp","$newmp" >> ${tmp_mountpoints}
     clonename="${dataset/$zpool\//}"
     clonename=${clonename//\//_}
     clone="${cloneds}/${clonename}"
     snapname="${dataset}@yatar_${dt}"
-    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | grep '@yatar' | tail -n1)"
+    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | grep --color=never '@yatar' | tail -n1)"
     zfs snapshot ${snapname}
     zfs hold yatar ${snapname}
     zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
     zfs mount ${clone}
     if [[ $prevsnap != "" ]] && [[ $full -ne 1 ]]
     then
-        diffs+=($(zfs diff -FHh ${prevsnap} ${snapname} | grep -E '^[+M]\s+F\s+' | cut -f3 | sed "s|${oldmp}|${newmp}|"))
+        zfs diff -FHh ${prevsnap} ${snapname} | grep --color=never -E '^[+M]\s+F\s+' | cut -f3 | sed "s|${oldmp}|${newmp}|" >> ${tmp_diffs}
     fi
 done
-diffs=($(printf "%s\n" "${diffs[@]}" | sort -u))
+sort --unique --output ${tmp_diffs} ${tmp_diffs}
 newline
 
 ## Find files located in the actual mountpoints
+tmp_finds="${tmpfsdir}/finds"
 write_logfile "Curating and filtering files, that need to be archived."
 function get_finds {
     local file="$1"
@@ -300,11 +309,11 @@ function get_finds {
     fi
 }
 export -f get_finds
-finds=()
-finds+=($(parallel --silent --jobs $cores get_finds ::: ${files[@]} ::: ${mountpoints[@]} | sort -u))
+parallel --silent --jobs $cores --arg-file ${tmp_files} --arg-file ${tmp_mountpoints} get_finds "{}" | sort -u >> ${tmp_finds}
 newline
 
 ## Get files from previously run jobs
+tmp_prevjournals="${tmpfsdir}/prevjournals"
 function get_journals {
     local journal="$1"
     cat $journal
@@ -315,52 +324,19 @@ lsjournals+=($(find ${workingdir} -type f -name "*.journal"))
 prevjournals=()
 if [[ ${#lsjournals[@]} -ne 0 ]] && [[ $full -ne 1 ]]
 then
-    prevjournals+=($(parallel --silent --jobs $cores get_journals ::: ${lsjournals[@]} | sort -u))
+    parallel --silent --jobs $cores get_journals ::: ${lsjournals[@]} | sort -u >> ${tmp_prevjournals}
 fi
-for j in ${prevjournals[@]}; do echo $j >> /tmp/prevjournals; done
 
 ## Build final list of files and write to journalfile, which will be used by bsdtar
-listoffiles=()
+tmp_listoffiles="${tmpfsdir}/listoffiles"
 if [[ $full -eq 1 ]]
 then
-    listoffiles=($(printf "%s\n" "${finds[@]}" | sort -u))
+    cp ${tmp_finds} ${tmp_listoffiles}
 else
-    for find in ${finds[@]}
-    do
-        for diff in ${diffs[@]}
-        do
-            if [[ "$find" == "$diff" ]]
-            then
-                listoffiles+=($find)
-            fi
-        done
-        if [[ ${#prevjournals[@]} -gt 0 ]]
-        then
-            count=0
-            for prevjournal in ${prevjournals[@]}
-            do
-                if [[ "$find" == "$prevjournal" ]]
-                then
-                    ((++count))
-                fi
-            done
-            if [[ $count -eq 0 ]]
-            then
-                listoffiles+=($find)
-            fi
-        else
-            listoffiles+=($find)
-        fi
-    done
+    fgrep --color=never --file="${tmp_finds}" "${tmp_diffs}" >> ${tmp_listoffiles}
+    fgrep --color=never --invert-match --file="${tmp_prevjournals}" "${tmp_finds}" >> ${tmp_listoffiles}
 fi
-listoffiles=($(printf "%s\n" "${listoffiles[@]}" | sort -u))
-
-## Write final listoffiles to journalfile
-touch $journalfile
-for file in ${listoffiles[@]}
-do
-    echo $file >> $journalfile
-done
+sort --unique --output $journalfile ${tmp_listoffiles}
 
 ## Actual writing
 dtbegin=$(date +%s)
@@ -429,11 +405,14 @@ write_errorfile
 
 # Unmount, release and destroy dataset
 write_logfile "Unmounting and destroying the cloned ZFS snapshots."
-for (( i=${#datasets[@]}-1; i>=0; i-- ))
+ndatasets=$(wc -l ${tmp_datasets} | awk '{print $1}')
+for (( i=${ndatasets}; i>0; i-- ))
 do
-    snapname="${datasets[$i]}@yatar_${dt}"
+    dataset=''
+    dataset=$(sed -n "${i}p" ${tmp_datasets})
+    snapname="${dataset}@yatar_${dt}"
     snaps=()
-    snaps+=($(zfs list -Ho name -t snapshot ${datasets[$i]} | grep '@yatar'))
+    snaps+=($(zfs list -Ho name -t snapshot ${dataset} | grep --color=never '@yatar'))
     for snap in ${snaps[@]}
     do
         clonedep=($(zfs get -Ho value clones $snap))
@@ -474,4 +453,5 @@ write_logfile "$dth - Finished job run."
 
 
 # Cleanup
-rm -r $clonemp $pidfile
+umount $tmpfsdir
+rm -r $clonemp $pidfile $tmpfsdir
