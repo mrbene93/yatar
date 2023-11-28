@@ -111,7 +111,7 @@ tmp_files="${tmpfsdir}/files"
 shift "$((OPTIND - 1))"
 for arg in "$@"
 do
-    echo ${arg} >> $tmp_files
+    echo "${arg}" >> $tmp_files
 done
 
 
@@ -119,15 +119,15 @@ done
 tmp_datasets="${tmpfsdir}/datasets"
 function get_datasets {
     local file="$1"
-    if [[ -f $file ]]
+    if [[ -f "$file" ]]
     then
-        df $file | tail -n +2 | cut -d' ' -f1
-    elif [[ -d $file ]]
+        df "$file" | tail -n +2 | cut -d' ' -f1
+    elif [[ -d "$file" ]]
     then
-        dataset=$(df $file | tail -n +2 | cut -d' ' -f1)
-        for ds in $(zfs list -Ho name -rt filesystem $dataset)
+        dataset=$(df "$file" | tail -n +2 | cut -d' ' -f1)
+        for ds in $(zfs list -Ho name -rt filesystem "$dataset")
         do
-            echo $ds
+            echo "$ds"
         done
     fi
 }
@@ -304,8 +304,8 @@ function get_finds {
     newmp="$(echo $mountpoint | cut -d',' -f2)"
     if [[ "$file" == *"$oldmp"* ]]
     then
-        newfile=$(echo $file | sed "s|${oldmp}|${newmp}|")
-        find ${newfile} -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db"
+        newfile=$(echo "$file" | sed "s|${oldmp}|${newmp}|")
+        find "$newfile" -type f ! -iname "*._*" ! -iname "*.Trash*" ! -iname "*.DocumentRevisions-V100" ! -iname "*.fseventsd" ! -iname "*.Spotlight*" ! -iname "*.TemporaryItems" ! -iname "*RECYCLE.BIN" ! -iname "System Volume Information" ! -iname ".DS_Store" ! -iname "desktop.ini" ! -iname "Thumbs.db"
     fi
 }
 export -f get_finds
