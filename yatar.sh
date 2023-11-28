@@ -108,10 +108,15 @@ mount -t tmpfs tmpfs $tmpfsdir
 
 # Get files to backup
 tmp_files="${tmpfsdir}/files"
+args=()
 shift "$((OPTIND - 1))"
 for arg in "$@"
 do
-    echo "${arg}" >> $tmp_files
+    args+=($arg)
+done
+for arg in ${args[@]}
+do
+    echo "$arg" >> ${tmp_files}
 done
 
 
