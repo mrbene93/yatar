@@ -22,6 +22,7 @@ tapedev="/dev/nsa$tapesa"
 taperewdev="/dev/sa$tapesa"
 tapectldev="/dev/sa$tapesa.ctl"
 ltokey='/var/keys/lto.key'
+appdata='/mnt/appdata/yatar'
 cloneds='data/appdata/yatar/clones'
 clonemp='/tmp/yatar'
 tmpfsdir='/tmp/yatar_tmpfs'
@@ -69,11 +70,11 @@ function moveto_file {
 
 
 # Get supplied parameters
-optstring=":felw:"
+optstring=":felj:"
 autoload=0
 eject=0
 full=0
-workingdir=''
+job=''
 while getopts ${optstring} arg
 do
     case ${arg} in
@@ -86,8 +87,8 @@ do
         l)  # Automatically load the tape, if none is inserted
             autoload=1
             ;;
-        w)  # Working directory
-            workingdir=$OPTARG
+        j)  # Job
+            job=${OPTARG}
             ;;
         \?) # Unknown options
             echo "Invalid option: -$OPTARG"
@@ -141,6 +142,7 @@ parallel --silent --jobs $cores --arg-file ${tmp_files} get_datasets "{}" | sort
 
 
 # Second batch of variables and functions
+workingdir="${appdata}/${job}"
 yatardir="${workingdir}/.yatar"
 excludefile="${yatardir}/exclude.txt"
 blocksize=$(sysctl -n kern.cam.sa.$tapesa.maxio)
@@ -285,8 +287,8 @@ do
     clonename="${dataset/$zpool\//}"
     clonename=${clonename//\//_}
     clone="${cloneds}/${clonename}"
-    snapname="${dataset}@yatar_${dt}"
-    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | grep --color=never '@yatar' | tail -n1)"
+    snapname="${dataset}@yatar_${dt}_${job}"
+    prevsnap="$(zfs list -Ho name -t snapshot ${dataset} | grep --color=never "@yatar_.*_${job}" | tail -n1)"
     zfs snapshot ${snapname}
     zfs hold yatar ${snapname}
     zfs clone -o canmount=noauto -o readonly=on -o mountpoint=${newmp} ${snapname} ${clone}
@@ -415,9 +417,9 @@ for (( i=${ndatasets}; i>0; i-- ))
 do
     dataset=''
     dataset=$(sed -n "${i}p" ${tmp_datasets})
-    snapname="${dataset}@yatar_${dt}"
+    snapname="${dataset}@yatar_${dt}_${job}"
     snaps=()
-    snaps+=($(zfs list -Ho name -t snapshot ${dataset} | grep --color=never '@yatar'))
+    snaps+=($(zfs list -Ho name -t snapshot ${dataset} | grep --color=never "@yatar_.*_${job}"))
     for snap in ${snaps[@]}
     do
         clonedep=($(zfs get -Ho value clones $snap))
