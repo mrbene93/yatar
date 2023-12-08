@@ -333,7 +333,7 @@ export -f get_journals
 lsjournals=()
 lsjournals+=($(find ${workingdir} -type f -name "*.journal"))
 prevjournals=()
-if [[ ${#lsjournals[@]} -ne 0 ]] && [[ $full -ne 1 ]]
+if [[ ${#lsjournals[@]} -gt 0 ]] && [[ $full -ne 1 ]]
 then
     parallel --silent --jobs $cores get_journals ::: ${lsjournals[@]} | sort -u >> ${tmp_prevjournals}
 fi
