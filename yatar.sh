@@ -393,7 +393,7 @@ if [[ -s $journalfile ]]
 then
     dtbegin=$(date +%s)
     write_logfile "Calculating checksums. This can take some time."
-    cat $journalfile | parallel --silent --jobs $cores xxhsum --quiet -H3 {} ::: | sort > $sumsfile
+    parallel --silent --jobs $cores --arg-file $journalfile xxhsum --quiet -H3 "{}" | sort > $sumsfile
     dtend=$(date +%s)
     duration=$((dtend - $dtbegin))
     durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
@@ -465,7 +465,7 @@ write_logfile "$dth - Finished job run."
 
 
 # Cleanup
-umount $tmpfsdir
+umount -f -t tmpfs $tmpfsdir
+find $tmpfsdir -delete
 find $clonemp -delete
 find $pidfile -type f -delete
-find $tmpfsdir -delete
