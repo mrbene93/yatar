@@ -109,6 +109,7 @@ mount -t tmpfs tmpfs $tmpfsdir
 
 # Get files to backup
 tmp_files="${tmpfsdir}/files"
+touch $tmp_files
 args=()
 shift "$((OPTIND - 1))"
 for arg in "$@"
@@ -123,6 +124,7 @@ done
 
 # Get involved ZFS datasets
 tmp_datasets="${tmpfsdir}/datasets"
+touch $tmp_datasets
 function get_datasets {
     local file="$1"
     if [[ -f "$file" ]]
@@ -303,6 +305,7 @@ newline
 
 ## Find files located in the actual mountpoints
 tmp_finds="${tmpfsdir}/finds"
+touch $tmp_finds
 write_logfile "Curating and filtering files, that need to be archived."
 function get_finds {
     local file="$1"
@@ -321,6 +324,7 @@ newline
 
 ## Get files from previously run jobs
 tmp_prevjournals="${tmpfsdir}/prevjournals"
+touch $tmp_prevjournals
 function get_journals {
     local journal="$1"
     cat $journal
@@ -336,6 +340,7 @@ fi
 
 ## Build final list of files and write to journalfile, which will be used by bsdtar
 tmp_listoffiles="${tmpfsdir}/listoffiles"
+touch $tmp_listoffiles
 if [[ $full -eq 1 ]]
 then
     cp ${tmp_finds} ${tmp_listoffiles}
@@ -461,4 +466,6 @@ write_logfile "$dth - Finished job run."
 
 # Cleanup
 umount $tmpfsdir
-rm -r $clonemp $pidfile $tmpfsdir
+find $clonemp -delete
+find $pidfile -type f -delete
+find $tmpfsdir -delete
