@@ -457,15 +457,22 @@ cd $workingdir
 ln -Fs $dt latest
 cd $oldpwd
 
+
+# Cleanup
+until [[ ! $(mount -t tmpfs | fgrep --color=never $tmpfsdir) ]]
+do
+    umount -f -t tmpfs $tmpfsdir
+    sync
+    sleep 1
+done
+find $tmpfsdir -delete
+find $clonemp -delete
+find $pidfile -type f -delete
+
+
+
 # Finish
 write_logfile "All done!"
 newline
 dth=$(date)
 write_logfile "$dth - Finished job run."
-
-
-# Cleanup
-umount -f -t tmpfs $tmpfsdir
-find $tmpfsdir -delete
-find $clonemp -delete
-find $pidfile -type f -delete
