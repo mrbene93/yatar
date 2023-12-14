@@ -379,6 +379,8 @@ write_logfile "Finished writing data to tape."
 duration=$((dtend - $dtbegin))
 durationh=$(date -u -r $duration "+%H Hours %M Minutes %S Seconds")
 write_logfile "This took $durationh."
+remcap="$(camcontrol attrib $tapedev -r attr_values -a 0x0000 -F text_esc)"
+write_logfile "This tape has now a remaining capacity of ${remcap}."
 newline
 write_volfile $nextfile $dt
 
